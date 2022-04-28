@@ -99,8 +99,11 @@ defmodule Castile do
           [{uri, prefix, xsd} | acc]
       end
     end)
+    # if xsds are split in multiple files the default P prefix overlap in further processing and cause problems unless we assign unique prefixes to them here
+    xsd_namespaces = assign_xsd_namespace_prefix(parsed, namespaces)
+    namespaces = namespaces ++ xsd_namespaces
 
-    model = add_schemas(xsds, opts, import_list, acc_model)
+    model = add_schemas(xsds, opts ++ [{:namespaces, namespaces}], import_list, acc_model)
 
     acc = {model, [parsed | acc_wsdl]}
     imports = get_imports(parsed)
@@ -169,6 +172,15 @@ defmodule Castile do
     |> List.flatten()
   end
   defp extract_wsdl_xsds(wsdl_definitions()), do: []
+
+  defp assign_xsd_namespace_prefix(wsdl_definitions(types: [{:"wsdl:tTypes", _attrs, _docs, [{:schemaType, [], 'http://tempuri.org/Imports', :undefined, :undefined, :undefined, :undefined, :undefined, :undefined, imports, _unknown}]}]), namespaces) when is_list(imports) do
+    imports
+    |> Enum.map(fn {:importType, _attrs, _docs, namespace, _xsd, _children} -> namespace end)
+    |> Enum.reject(fn namespace -> Enum.find(namespaces, fn {uri,_prefix} -> namespace == uri end) end)
+    |> Enum.with_index()
+    |> Enum.map(fn {namespace, index} -> {namespace, 'X#{index}'} end)
+  end
+  defp assign_xsd_namespace_prefix(wsdl_definitions()), do: []
 
   defp get_ports(wsdls) do
     Enum.reduce(wsdls, [], fn
